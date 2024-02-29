@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from networkframe import NetworkFrame
-from sklearn.metrics import adjusted_rand_score
 
 from graspologic.match import graph_match
 
@@ -41,19 +40,57 @@ nf = NetworkFrame(
     edges=connections_df,
 )
 
+np.random.seed(8888)
+
 n_columns = 796
 test = True
 if test:
-    n_select_columns = 30
+    n_select_columns = 200
     select_cols = np.random.choice(
         np.arange(1, n_columns + 1), size=n_select_columns, replace=False
     )
     # just for testing
-    nf = nf.query_nodes("column_id.isin(@select_cols)", local_dict=locals()).copy()
+    unassigned_nodes = (
+        nf.nodes.query("column_id.isna()")
+        .index.to_series()
+        .sample(frac=n_select_columns / n_columns)
+    )
+    nf = nf.query_nodes(
+        "column_id.isin(@select_cols) | index.isin(@unassigned_nodes)",
+        local_dict=locals(),
+    ).copy()
+
     n_columns = n_select_columns
 
 n_types = 31
 n_ideal_cells = n_columns * n_types
+
+# %%
+nf.nodes["node_type"] = "real"
+
+
+# %%
+
+label_feature = "column_id"
+cell_to_label_counts = (
+    nf.nodes.pivot_table(
+        index="cell_type", columns=label_feature, aggfunc="size", dropna=False
+    )
+    .fillna(0)
+    .astype(int)
+)
+cell_to_label_counts
+
+# %%
+
+cell_to_label_counts.sum(axis=1)
+
+# if there are fewer than n_columns of a given cell type, then we should make some fake
+# nodes in the nodes dataframe to represent these
+# if there are more than n_columns of a given cell type, then we should also make
+# some fake nodes in the target dataframe to represent these
+# ...
+# i think?
 
 # %%
 
@@ -68,18 +105,21 @@ n_ideal_cells = n_columns * n_types
 
 # TODO look into an adopted padding version of this? could that matter here
 
+# TODO could iteratively refine the actual subgraph that one is looking for, i.e. make
+# the block diagonal equal to the average one of these column subgraphs
+# i doubt this will do better on the actual problem, but it could be interesting!
 
-add_fake_nodes = False
+cell_type_counts = nf.nodes["cell_type"].value_counts()
+
+label_feature = "column_id"
+cell_to_label_counts = (
+    nf.nodes.pivot_table(index="cell_type", columns=label_feature, aggfunc="size")
+    .fillna(0)
+    .astype(int)
+)
+
+add_fake_nodes = True
 if add_fake_nodes:
-    cell_type_counts = nf.nodes["cell_type"].value_counts()
-
-    label_feature = "column_id"
-    cell_to_label_counts = (
-        nf.nodes.pivot_table(index="cell_type", columns=label_feature, aggfunc="size")
-        .fillna(0)
-        .astype(int)
-    )
-
     i = 1
     fake_nodes = []
     missing_cell_ilocs = np.argwhere(cell_to_label_counts == 0)
@@ -91,6 +131,7 @@ if add_fake_nodes:
                 "cell_id": -i,
                 "column_id": column_id,
                 "cell_type": cell_type,
+                "node_type": "fake",
             }
         )
         i += 1
@@ -101,7 +142,54 @@ if add_fake_nodes:
 
     nf.add_nodes(fake_nodes, inplace=True)
 
-    nf.nodes
+nf.nodes
+# %%
+cell_to_label_counts = (
+    nf.nodes.pivot_table(
+        index="cell_type", columns=label_feature, aggfunc="size", dropna=False
+    )
+    .fillna(0)
+    .astype(int)
+)
+cell_type_counts = cell_to_label_counts.sum(axis=1)
+cell_type_counts
+
+# %%
+dummy_labels = np.concatenate([np.full(n_types, i) for i in range(1, n_columns + 1)])
+uni_cell_types = np.unique(nf.nodes["cell_type"])
+dummy_cell_types = np.concatenate([uni_cell_types for _ in range(n_columns)])
+target_nodes = pd.DataFrame(
+    {
+        "cell_type": dummy_cell_types,
+        "column_id": dummy_labels,
+        "node_type": "target",
+    }
+)
+target_nodes
+# %%
+cell_type_extras = cell_type_counts - n_columns
+cell_type_extras
+# %%
+extra_nodes = pd.DataFrame(
+    {
+        "cell_type": np.repeat(cell_type_extras.index, cell_type_extras),
+        "column_id": 9999,
+        "node_type": "extra",
+    }
+)
+extra_nodes
+
+# %%
+target_nodes = pd.concat([target_nodes, extra_nodes], ignore_index=True)
+target_nodes.sort_values(["column_id", "cell_type"], inplace=True)
+# %%
+# these are "fake" edges
+
+target_labels = target_nodes["column_id"].values
+mask = (target_labels[:, None] == target_labels[None, :]).astype(float)
+not_fake = (target_nodes["column_id"] != 9999).values
+not_fake_mask = not_fake[:, None] & not_fake[None, :]
+B = (mask * not_fake_mask).astype(float)
 
 # %%
 
@@ -114,27 +202,22 @@ A = nf.to_adjacency(weight_col="weight").values.astype(float)
 
 # %%
 
-# this is a matrix to match to
-# it has block diagonals of shape 31 x 31
-# matching to this matrix tries to force an alignment where edges are within a column
-dummy_labels = np.concatenate([np.full(n_types, i) for i in range(1, n_columns + 1)])
-mask = (dummy_labels[:, None] == dummy_labels[None, :]).astype(float)
-B = mask.astype(float)
+# # this is a matrix to match to
+# # it has block diagonals of shape 31 x 31
+# # matching to this matrix tries to force an alignment where edges are within a column
+# dummy_labels = np.concatenate([np.full(n_types, i) for i in range(1, n_columns + 1)])
+# mask = (dummy_labels[:, None] == dummy_labels[None, :]).astype(float)
+# B = mask.astype(float)
 
 # %%
-uni_cell_types = np.unique(nf.nodes["cell_type"])
-dummy_cell_types = np.concatenate([uni_cell_types for i in range(n_columns)])
-target_df = pd.DataFrame(
-    {
-        "cell_type": dummy_cell_types,
-        "column_id": dummy_labels,
-    }
+
+
+# %%
+
+S = pd.DataFrame(index=nf.nodes.index, columns=target_nodes.index, dtype=float).fillna(
+    0.0
 )
-target_df
-
-# %%
-S = pd.DataFrame(index=nf.nodes.index, columns=target_df.index).fillna(0)
-S = nf.nodes["cell_type"].values[:, None] == target_df["cell_type"].values[None, :]
+S = nf.nodes["cell_type"].values[:, None] == target_nodes["cell_type"].values[None, :]
 S = S.astype(float)
 
 # %%
@@ -204,14 +287,14 @@ result = graph_match(
     A,
     B,
     S=S * 100,
-    max_iter=60,
+    max_iter=100,
     shuffle_input=False,
-    n_init=50,
-    # tol=0.00001,
+    n_init=1,
+    tol=0.0001,
     # init_perturbation=0.001,
     verbose=10,
     fast=True,
-    n_jobs=8,
+    n_jobs=1,
 )
 print(f"{time.time() - currtime:.3f} seconds elapsed.")
 
@@ -257,16 +340,31 @@ indices_B = result.indices_B
 # predicted_labels = dummy_labels[indices_B]
 # nf.nodes["predicted_labels"] = predicted_labels
 
-reordered_index = nf.nodes.index[indices_A]
+reordered_node_index = nf.nodes.index[indices_A]
 
-predicted_labels = pd.Series(index=reordered_index, data=dummy_labels[indices_B])
+reordered_target_index = target_nodes.index[indices_B]
+reordered_targets = target_nodes.loc[reordered_target_index].copy()
 
-nf.nodes["predicted_labels"] = predicted_labels
+reordered_targets.index = reordered_node_index
+reordered_targets.rename(columns=lambda x: f"predicted_{x}", inplace=True)
+
+matched_nodes = nf.nodes.join(reordered_targets)
+
+matched_nf = NetworkFrame(
+    nodes=matched_nodes,
+    edges=nf.edges,
+)
+
 # %%
-random_labels = nf.nodes["column_id"].copy()
-random_labels = random_labels.sample(frac=1).values
-nf.nodes["random_labels"] = random_labels
+benchmark_nf = nf.query_nodes('node_type == "real" & column_id.notna()').copy()
 
+print(len(benchmark_nf))
+# %%
+matched_nf.query_nodes(
+    "node_type == 'real' & predicted_node_type == 'target'", inplace=True
+)
+
+n_matched = len(matched_nf)
 # %%
 
 label_feature = "predicted_labels"
@@ -294,7 +392,7 @@ def compute_metrics(nf, label_feature):
 
 
 old_n_within_group, old_cell_to_label_counts, old_violations = compute_metrics(
-    nf, "column_id"
+    benchmark_nf, "column_id"
 )
 print("Old:")
 print(old_n_within_group)
@@ -302,23 +400,15 @@ print(old_violations)
 print()
 
 new_n_within_group, new_cell_to_label_counts, new_violations = compute_metrics(
-    nf, "predicted_labels"
+    matched_nf, "predicted_column_id"
 )
 print("New:")
 print(new_n_within_group)
 print(new_violations)
 print()
 
-random_n_within_group, random_cell_to_label_counts, random_violations = compute_metrics(
-    nf, "random_labels"
-)
-print("Random:")
-print(random_n_within_group)
-print(random_violations)
-print()
-
-nodes = nf.nodes[nf.nodes.index > 0]
-ari = adjusted_rand_score(nodes["predicted_labels"].values, nodes["column_id"].values)
-print(f"ARI: {ari:.2f}")
-
 # %%
+import pickle
+
+with open("result.bin", "wb") as f:
+    pickle.dump(result, f)
