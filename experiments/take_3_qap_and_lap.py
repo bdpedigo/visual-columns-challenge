@@ -45,7 +45,7 @@ np.random.seed(8888)
 n_columns = 796
 test = True
 if test:
-    n_select_columns = 200
+    n_select_columns = 400
     select_cols = np.random.choice(
         np.arange(1, n_columns + 1), size=n_select_columns, replace=False
     )
@@ -235,44 +235,46 @@ S = S.astype(float)
 
 
 # %%
-fig, axs = plt.subplots(1, 3, figsize=(15, 5))
 
-sns.heatmap(
-    A > 0,
-    ax=axs[0],
-    cmap="RdBu_r",
-    center=0,
-    cbar=False,
-    xticklabels=False,
-    yticklabels=False,
-    square=True,
-)
-axs[0].set_title("A")
+if test:
+    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
 
-sns.heatmap(
-    B,
-    ax=axs[1],
-    cmap="RdBu_r",
-    center=0,
-    cbar=False,
-    xticklabels=False,
-    yticklabels=False,
-    square=True,
-)
+    sns.heatmap(
+        A > 0,
+        ax=axs[0],
+        cmap="RdBu_r",
+        center=0,
+        cbar=False,
+        xticklabels=False,
+        yticklabels=False,
+        square=True,
+    )
+    axs[0].set_title("A")
 
-axs[1].set_title("B")
+    sns.heatmap(
+        B,
+        ax=axs[1],
+        cmap="RdBu_r",
+        center=0,
+        cbar=False,
+        xticklabels=False,
+        yticklabels=False,
+        square=True,
+    )
 
-sns.heatmap(
-    S,
-    ax=axs[2],
-    cmap="RdBu_r",
-    center=0,
-    cbar=False,
-    xticklabels=False,
-    yticklabels=False,
-    square=True,
-)
-axs[2].set_title("S")
+    axs[1].set_title("B")
+
+    sns.heatmap(
+        S,
+        ax=axs[2],
+        cmap="RdBu_r",
+        center=0,
+        cbar=False,
+        xticklabels=False,
+        yticklabels=False,
+        square=True,
+    )
+    axs[2].set_title("S")
 
 # %%
 
@@ -281,16 +283,31 @@ axs[2].set_title("S")
 # A_mod = A.copy()
 # A_mod.data += np.random.normal(0, 1, A_mod.data.shape[0])
 
+max_iter = 1
+class_weight = 100
+n_init = 1
+tol = 0.001
+sparse = False
+from scipy.sparse import csr_array
+
+if sparse:
+    A_input = csr_array(A)
+    B_input = csr_array(B)
+    S_input = csr_array(S)
+else: 
+    A_input = A
+    B_input = B
+    S_input = S
 
 currtime = time.time()
 result = graph_match(
-    A,
-    B,
-    S=S * 100,
-    max_iter=100,
+    A_input,
+    B_input,
+    S=S_input * class_weight,
+    max_iter=max_iter,
     shuffle_input=False,
-    n_init=1,
-    tol=0.0001,
+    n_init=n_init,
+    tol=tol,
     # init_perturbation=0.001,
     verbose=10,
     fast=True,
@@ -303,42 +320,41 @@ result.misc
 
 
 # %%
-fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+if test:
+    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
 
-sns.heatmap(
-    A[result.indices_A][:, result.indices_A] > 0,
-    ax=axs[0],
-    cbar=False,
-    square=True,
-    cmap="RdBu_r",
-    center=0,
-)
+    sns.heatmap(
+        A[result.indices_A][:, result.indices_A] > 0,
+        ax=axs[0],
+        cbar=False,
+        square=True,
+        cmap="RdBu_r",
+        center=0,
+    )
 
-sns.heatmap(
-    B[result.indices_B][:, result.indices_B],
-    ax=axs[1],
-    cbar=False,
-    square=True,
-    cmap="RdBu_r",
-    center=0,
-)
+    sns.heatmap(
+        B[result.indices_B][:, result.indices_B],
+        ax=axs[1],
+        cbar=False,
+        square=True,
+        cmap="RdBu_r",
+        center=0,
+    )
 
-sns.heatmap(
-    S[result.indices_A][:, result.indices_B],
-    ax=axs[2],
-    cbar=False,
-    square=True,
-    cmap="RdBu_r",
-    center=0,
-)
+    sns.heatmap(
+        S[result.indices_A][:, result.indices_B],
+        ax=axs[2],
+        cbar=False,
+        square=True,
+        cmap="RdBu_r",
+        center=0,
+    )
 
 
 # %%
 
 indices_A = result.indices_A
 indices_B = result.indices_B
-# predicted_labels = dummy_labels[indices_B]
-# nf.nodes["predicted_labels"] = predicted_labels
 
 reordered_node_index = nf.nodes.index[indices_A]
 
@@ -358,13 +374,11 @@ matched_nf = NetworkFrame(
 # %%
 benchmark_nf = nf.query_nodes('node_type == "real" & column_id.notna()').copy()
 
-print(len(benchmark_nf))
 # %%
 matched_nf.query_nodes(
     "node_type == 'real' & predicted_node_type == 'target'", inplace=True
 )
 
-n_matched = len(matched_nf)
 # %%
 
 label_feature = "predicted_labels"
@@ -388,10 +402,12 @@ def compute_metrics(nf, label_feature):
     violations_mask = cell_to_label_counts > 1
     violations = int(cell_to_label_counts[violations_mask].sum().sum())
 
-    return n_within_group, cell_to_label_counts, violations
+    n_matched = len(nf)
+
+    return n_within_group, n_matched, violations
 
 
-old_n_within_group, old_cell_to_label_counts, old_violations = compute_metrics(
+old_n_within_group, old_n_matched, old_violations = compute_metrics(
     benchmark_nf, "column_id"
 )
 print("Old:")
@@ -399,7 +415,7 @@ print(old_n_within_group)
 print(old_violations)
 print()
 
-new_n_within_group, new_cell_to_label_counts, new_violations = compute_metrics(
+new_n_within_group, new_n_matched, new_violations = compute_metrics(
     matched_nf, "predicted_column_id"
 )
 print("New:")
@@ -411,4 +427,5 @@ print()
 import pickle
 
 with open("result.bin", "wb") as f:
+    result.misc["convex_solution"] = None
     pickle.dump(result, f)
