@@ -1,4 +1,5 @@
 # %%
+import pickle
 import time
 from pathlib import Path
 
@@ -7,6 +8,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from networkframe import NetworkFrame
+from scipy.sparse import csr_array
 
 from graspologic.match import graph_match
 
@@ -43,7 +45,7 @@ nf = NetworkFrame(
 np.random.seed(8888)
 
 n_columns = 796
-test = True
+test = False
 if test:
     n_select_columns = 10
     select_cols = np.random.choice(
@@ -68,7 +70,22 @@ n_ideal_cells = n_columns * n_types
 # %%
 nf.nodes["node_type"] = "real"
 
+# %%
+len(np.unique(nf.edges[["source", "target"]].values, axis=0))
 
+# %%
+len(nf.edges)
+
+# %%
+label_feature = "column_id"
+edges = nf.apply_node_features(label_feature).edges
+edges = edges.query("source_column_id.notna() & target_column_id.notna()")
+edges = edges.query("source != target")
+n_within_group = edges.query(f"source_{label_feature} == target_{label_feature}")[
+    "weight"
+].sum()
+print(n_within_group)
+print(1_381_915)
 # %%
 
 label_feature = "column_id"
@@ -93,9 +110,6 @@ cell_to_label_counts.sum(axis=1)
 # i think?
 
 # %%
-
-# TODO redo this to consider how cells types with more than 31 members are dealt with
-# possibly means I need to pad B as well...
 
 # TODO look into sweeping over the weighting of AB vs S terms
 
@@ -283,12 +297,11 @@ if test:
 # A_mod = A.copy()
 # A_mod.data += np.random.normal(0, 1, A_mod.data.shape[0])
 
-max_iter = 1
+max_iter = 30
 class_weight = 100
 n_init = 1
 tol = 0.001
 sparse = True
-from scipy.sparse import csr_array
 
 if sparse:
     A_input = csr_array(A)
@@ -314,10 +327,10 @@ result = graph_match(
     n_jobs=1,
 )
 print(f"{time.time() - currtime:.3f} seconds elapsed.")
+print()
 
 # %%
 result.misc
-
 
 # %%
 if test:
@@ -380,6 +393,10 @@ matched_nf.query_nodes(
 )
 
 # %%
+# TODO write some code to post-process and remove nodes that are improperly matched
+# or, increase the weighting of that term in the objective function
+
+# %%
 
 
 def compute_metrics(nf, label_feature):
@@ -422,8 +439,26 @@ print(new_violations)
 print()
 
 # %%
-import pickle
 
-with open("result.bin", "wb") as f:
+save_name = f"test={test}-n_columns={n_columns}-fake_nodes={add_fake_nodes}-class_weight={class_weight}-n_init={n_init}-tol={tol}-max_iter={max_iter}-sparse={sparse}"
+
+with open(f"{save_name}.bin", "wb") as f:
     result.misc[0]["convex_solution"] = None
     pickle.dump(result, f)
+
+matched_nf.nodes.to_csv(f"{save_name}-matched_nodes.csv")
+target_nodes.to_csv(f"{save_name}-target_nodes.csv")
+
+# %%
+file = "test=False-n_columns=796-fake_nodes=True-class_weight=100-n_init=1-tol=0.001-max_iter=30-sparse=True.bin"
+with open(file, "rb") as f:
+    result = pickle.load(f)
+
+# %%
+
+changes = result.misc[0]["changes"]
+
+fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+sns.lineplot(x=np.arange(len(changes)), y=changes, ax=axs[0])
+sns.lineplot(x=np.arange(len(changes)), y=changes, ax=axs[1])
+axs[1].set_yscale("log")
