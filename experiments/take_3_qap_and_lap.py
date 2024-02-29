@@ -45,7 +45,7 @@ np.random.seed(8888)
 n_columns = 796
 test = True
 if test:
-    n_select_columns = 400
+    n_select_columns = 10
     select_cols = np.random.choice(
         np.arange(1, n_columns + 1), size=n_select_columns, replace=False
     )
@@ -287,14 +287,14 @@ max_iter = 1
 class_weight = 100
 n_init = 1
 tol = 0.001
-sparse = False
+sparse = True
 from scipy.sparse import csr_array
 
 if sparse:
     A_input = csr_array(A)
     B_input = csr_array(B)
     S_input = csr_array(S)
-else: 
+else:
     A_input = A
     B_input = B
     S_input = S
@@ -381,8 +381,6 @@ matched_nf.query_nodes(
 
 # %%
 
-label_feature = "predicted_labels"
-
 
 def compute_metrics(nf, label_feature):
     edges = nf.apply_node_features(label_feature).edges
@@ -427,5 +425,5 @@ print()
 import pickle
 
 with open("result.bin", "wb") as f:
-    result.misc["convex_solution"] = None
+    result.misc[0]["convex_solution"] = None
     pickle.dump(result, f)
