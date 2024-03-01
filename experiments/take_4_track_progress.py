@@ -277,6 +277,62 @@ def compute_metrics(nf, label_feature):
     return n_within_group, n_matched, violations
 
 
+def correct_violations(nf, label_feature):
+    edges = nf.apply_node_features(label_feature).edges
+    within_group_edges = edges.query(
+        f"source_{label_feature} == target_{label_feature}"
+    )
+
+    nodes = nf.nodes
+    # don't count the dummy nodes here
+    nodes = nodes[nodes.index > 0]
+    cell_to_label_counts = (
+        nodes.pivot_table(index="cell_type", columns=label_feature, aggfunc="size")
+        .fillna(0)
+        .astype(int)
+    )
+
+    violations_mask = cell_to_label_counts > 1
+    violation_groups = np.where(violations_mask)
+
+    corrected_nodes = nf.nodes.copy()
+
+    for group_i in range(len(violation_groups[0])):
+        cell_type_iloc = violation_groups[0][group_i]
+        column_id_iloc = violation_groups[1][group_i]
+        cell_type = cell_to_label_counts.index[cell_type_iloc]  # noqa: F841
+        column_id = cell_to_label_counts.columns[column_id_iloc]  # noqa: F841
+
+        conflicting_nodes = nodes.query(
+            "cell_type == @cell_type & predicted_column_id == @column_id"
+        )
+
+        # what would happen if we unassigned these nodes?
+        # test them one at a time, find the unassignment which would
+        # lose the least amount of within-group edges
+        best_score = 0
+        best_node = None
+        for node in conflicting_nodes.index:
+            others = conflicting_nodes.index[conflicting_nodes.index != node]
+            # subset the data to only count edges where this node is in that group
+            subset_edges = within_group_edges.query(
+                "~source.isin(@others) & ~target.isin(@others)"
+            )
+            subset_score = subset_edges["weight"].sum()
+            if subset_score > best_score:
+                best_score = subset_score
+                best_node = node
+
+        others = conflicting_nodes.index[conflicting_nodes.index != best_node]
+        corrected_nodes.loc[others, "predicted_column_id"] = np.nan
+
+    corrected_nf = NetworkFrame(
+        nodes=corrected_nodes,
+        edges=nf.edges,
+    )
+    return corrected_nf
+
+
 benchmark_nf = nf.query_nodes('node_type == "real" & column_id.notna()').copy()
 old_n_within_group, old_n_matched, old_violations = compute_metrics(
     benchmark_nf, "column_id"
@@ -289,7 +345,7 @@ print()
 
 
 max_iter = 100
-class_weight = 100
+class_weight = 120  # 150
 n_init = 1
 tol = 0.001
 sparse = True
@@ -303,7 +359,7 @@ else:
     B_input = B
     S_input = S
 
-save_name = f"test={test}-n_columns={n_columns}-fake_nodes={add_fake_nodes}-class_weight={class_weight}-n_init={n_init}-tol={tol}-max_iter={max_iter}-sparse={sparse}"
+save_name = f"test={test}-class_weight={class_weight}-tol={tol}-max_iter={max_iter}-sparse={sparse}"
 
 results_by_iter = []
 scores = []
@@ -311,6 +367,7 @@ last_solution = np.eye(A_input.shape[0])
 last_perm = np.arange(B_input.shape[0])
 max_stable_steps = 5
 stable_step_counter = 0
+all_time = time.time()
 for i in range(max_iter):
     print("Iteration:", i)
     currtime = time.time()
@@ -345,11 +402,23 @@ for i in range(max_iter):
     new_n_within_group, new_n_matched, new_violations = compute_metrics(
         matched_nf, "predicted_column_id"
     )
+
+    corrected_nf = correct_violations(matched_nf, "predicted_column_id")
+
+    (
+        corrected_n_within_group,
+        corrected_n_matched,
+        corrected_violations,
+    ) = compute_metrics(corrected_nf, "predicted_column_id")
+
     scores.append(
         {
             "n_within_group": new_n_within_group,
             "n_matched": new_n_matched,
             "n_violations": new_violations,
+            "corrected_n_within_group": corrected_n_within_group,
+            "corrected_n_matched": corrected_n_matched,
+            "corrected_violations": corrected_violations,
             "swaps_from_last": swaps,
         }
     )
@@ -380,6 +449,10 @@ with open(f"{save_name}_results_by_iter.pkl", "wb") as f:
 
 matched_nf.nodes.to_csv(f"{save_name}-matched_nodes.csv")
 target_nodes.to_csv(f"{save_name}-target_nodes.csv")
+
+print("\n---")
+print(f"{time.time() - all_time:.3f} seconds elapsed in total")
+print("---\n")
 
 
 # %%
@@ -412,26 +485,3 @@ if test:
         cmap="RdBu_r",
         center=0,
     )
-
-
-# %%
-# TODO write some code to post-process and remove nodes that are improperly matched
-# or, increase the weighting of that term in the objective function
-
-
-# %%
-
-
-# %%
-# file = "test=False-n_columns=796-fake_nodes=True-class_weight=100-n_init=1-tol=0.001-max_iter=30-sparse=True.bin"
-# with open(file, "rb") as f:
-#     result = pickle.load(f)
-
-# # %%
-
-# changes = result.misc[0]["changes"]
-
-# fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-# sns.lineplot(x=np.arange(len(changes)), y=changes, ax=axs[0])
-# sns.lineplot(x=np.arange(len(changes)), y=changes, ax=axs[1])
-# axs[1].set_yscale("log")
