@@ -57,7 +57,7 @@ nf = NetworkFrame(
 np.random.seed(8888)
 
 n_columns = 796
-test = True
+test = False
 if test:
     n_select_columns = 10
     select_cols = np.random.choice(
@@ -303,6 +303,8 @@ else:
     B_input = B
     S_input = S
 
+save_name = f"test={test}-n_columns={n_columns}-fake_nodes={add_fake_nodes}-class_weight={class_weight}-n_init={n_init}-tol={tol}-max_iter={max_iter}-sparse={sparse}"
+
 results_by_iter = []
 scores = []
 last_solution = np.eye(A_input.shape[0])
@@ -333,6 +335,10 @@ for i in range(max_iter):
     swaps = (last_perm != result.indices_B).sum()
     last_perm = result.indices_B
     print(f"Swaps: {swaps}")
+    if swaps == 0:
+        stable_step_counter += 1
+    else:
+        stable_step_counter = 0
 
     matched_nf = create_matched_networkframe(nf, result)
 
@@ -356,8 +362,13 @@ for i in range(max_iter):
     result.misc[0]["convex_solution"] = None
     results_by_iter.append(result)
 
+    score_df = pd.DataFrame(scores)
+    score_df.to_csv(f"{save_name}_scores.csv")
 
-save_name = f"test={test}-n_columns={n_columns}-fake_nodes={add_fake_nodes}-class_weight={class_weight}-n_init={n_init}-tol={tol}-max_iter={max_iter}-sparse={sparse}"
+    if stable_step_counter >= max_stable_steps:
+        print("Converged!")
+        break
+
 
 with open(f"{save_name}_final_result.pkl", "wb") as f:
     result.misc[0]["convex_solution"] = None
@@ -365,6 +376,7 @@ with open(f"{save_name}_final_result.pkl", "wb") as f:
 
 with open(f"{save_name}_results_by_iter.pkl", "wb") as f:
     pickle.dump(results_by_iter, f)
+
 
 matched_nf.nodes.to_csv(f"{save_name}-matched_nodes.csv")
 target_nodes.to_csv(f"{save_name}-target_nodes.csv")
