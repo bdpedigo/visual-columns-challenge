@@ -325,10 +325,14 @@ def correct_violations(nf, label_feature):
 
         others = conflicting_nodes.index[conflicting_nodes.index != best_node]
         corrected_nodes.loc[others, "predicted_column_id"] = np.nan
+        corrected_nodes.loc[others, "predicted_node_type"] = "extra"
 
     corrected_nf = NetworkFrame(
         nodes=corrected_nodes,
         edges=nf.edges,
+    )
+    corrected_nf.query_nodes(
+        "node_type == 'real' & predicted_node_type == 'target'", inplace=True
     )
     return corrected_nf
 
@@ -411,21 +415,18 @@ for i in range(max_iter):
         corrected_violations,
     ) = compute_metrics(corrected_nf, "predicted_column_id")
 
-    scores.append(
-        {
-            "n_within_group": new_n_within_group,
-            "n_matched": new_n_matched,
-            "n_violations": new_violations,
-            "corrected_n_within_group": corrected_n_within_group,
-            "corrected_n_matched": corrected_n_matched,
-            "corrected_violations": corrected_violations,
-            "swaps_from_last": swaps,
-        }
-    )
-    print("New scores:")
-    print(f"Synapses in columns: {new_n_within_group}")
-    print(f"Matched nodes: {new_n_matched}")
-    print(f"Violations: {new_violations}")
+    iter_scores = {
+        "n_within_group": new_n_within_group,
+        "n_matched": new_n_matched,
+        "n_violations": new_violations,
+        "corrected_n_within_group": corrected_n_within_group,
+        "corrected_n_matched": corrected_n_matched,
+        "corrected_violations": corrected_violations,
+        "swaps_from_last": swaps,
+    }
+    scores.append(iter_scores)
+    print("Iteration scores:")
+    print(iter_scores)
     print()
 
     result.misc[0]["convex_solution"] = None
@@ -448,6 +449,7 @@ with open(f"{save_name}_results_by_iter.pkl", "wb") as f:
 
 
 matched_nf.nodes.to_csv(f"{save_name}-matched_nodes.csv")
+corrected_nf.nodes.to_csv(f"{save_name}-corrected_nodes.csv")
 target_nodes.to_csv(f"{save_name}-target_nodes.csv")
 
 print("\n---")
