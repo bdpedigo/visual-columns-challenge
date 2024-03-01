@@ -57,9 +57,9 @@ nf = NetworkFrame(
 np.random.seed(8888)
 
 n_columns = 796
-test = False
+test = True
 if test:
-    n_select_columns = 200
+    n_select_columns = 10
     select_cols = np.random.choice(
         np.arange(1, n_columns + 1), size=n_select_columns, replace=False
     )
@@ -79,25 +79,7 @@ if test:
 n_types = 31
 n_ideal_cells = n_columns * n_types
 
-# %%
 nf.nodes["node_type"] = "real"
-
-# %%
-len(np.unique(nf.edges[["source", "target"]].values, axis=0))
-
-# %%
-len(nf.edges)
-
-# %%
-label_feature = "column_id"
-edges = nf.apply_node_features(label_feature).edges
-edges = edges.query("source_column_id.notna() & target_column_id.notna()")
-edges = edges.query("source != target")
-n_within_group = edges.query(f"source_{label_feature} == target_{label_feature}")[
-    "weight"
-].sum()
-print(n_within_group)
-print(1_381_915)
 
 
 # %%
@@ -306,7 +288,7 @@ print(old_violations)
 print()
 
 
-max_iter = 10
+max_iter = 100
 class_weight = 100
 n_init = 1
 tol = 0.001
@@ -321,6 +303,8 @@ else:
     B_input = B
     S_input = S
 
+results_by_iter = []
+scores = []
 last_solution = np.eye(A_input.shape[0])
 last_perm = np.arange(B_input.shape[0])
 max_stable_steps = 5
@@ -355,11 +339,35 @@ for i in range(max_iter):
     new_n_within_group, new_n_matched, new_violations = compute_metrics(
         matched_nf, "predicted_column_id"
     )
+    scores.append(
+        {
+            "n_within_group": new_n_within_group,
+            "n_matched": new_n_matched,
+            "n_violations": new_violations,
+            "swaps_from_last": swaps,
+        }
+    )
     print("New scores:")
     print(f"Synapses in columns: {new_n_within_group}")
     print(f"Matched nodes: {new_n_matched}")
     print(f"Violations: {new_violations}")
     print()
+
+    result.misc[0]["convex_solution"] = None
+    results_by_iter.append(result)
+
+
+save_name = f"test={test}-n_columns={n_columns}-fake_nodes={add_fake_nodes}-class_weight={class_weight}-n_init={n_init}-tol={tol}-max_iter={max_iter}-sparse={sparse}"
+
+with open(f"{save_name}_final_result.pkl", "wb") as f:
+    result.misc[0]["convex_solution"] = None
+    pickle.dump(result, f)
+
+with open(f"{save_name}_results_by_iter.pkl", "wb") as f:
+    pickle.dump(results_by_iter, f)
+
+matched_nf.nodes.to_csv(f"{save_name}-matched_nodes.csv")
+target_nodes.to_csv(f"{save_name}-target_nodes.csv")
 
 
 # %%
@@ -401,25 +409,17 @@ if test:
 
 # %%
 
-save_name = f"test={test}-n_columns={n_columns}-fake_nodes={add_fake_nodes}-class_weight={class_weight}-n_init={n_init}-tol={tol}-max_iter={max_iter}-sparse={sparse}"
-
-with open(f"{save_name}.bin", "wb") as f:
-    result.misc[0]["convex_solution"] = None
-    pickle.dump(result, f)
-
-matched_nf.nodes.to_csv(f"{save_name}-matched_nodes.csv")
-target_nodes.to_csv(f"{save_name}-target_nodes.csv")
 
 # %%
-file = "test=False-n_columns=796-fake_nodes=True-class_weight=100-n_init=1-tol=0.001-max_iter=30-sparse=True.bin"
-with open(file, "rb") as f:
-    result = pickle.load(f)
+# file = "test=False-n_columns=796-fake_nodes=True-class_weight=100-n_init=1-tol=0.001-max_iter=30-sparse=True.bin"
+# with open(file, "rb") as f:
+#     result = pickle.load(f)
 
-# %%
+# # %%
 
-changes = result.misc[0]["changes"]
+# changes = result.misc[0]["changes"]
 
-fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-sns.lineplot(x=np.arange(len(changes)), y=changes, ax=axs[0])
-sns.lineplot(x=np.arange(len(changes)), y=changes, ax=axs[1])
-axs[1].set_yscale("log")
+# fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+# sns.lineplot(x=np.arange(len(changes)), y=changes, ax=axs[0])
+# sns.lineplot(x=np.arange(len(changes)), y=changes, ax=axs[1])
+# axs[1].set_yscale("log")
