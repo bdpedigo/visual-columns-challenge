@@ -11,15 +11,14 @@ from graspologic.embed import ClassicalMDS
 test = False
 n_columns = 796
 add_fake_nodes = True
-max_iter = 100
+max_iter = 101
 class_weight = 100
 n_init = 1
 tol = 0.001
 sparse = True
-
-save_name = f"test={test}-n_columns={n_columns}-fake_nodes={add_fake_nodes}-class_weight={class_weight}-n_init={n_init}-tol={tol}-max_iter={max_iter}-sparse={sparse}"
+save_name = "visual-columns-challenge/results/test=False-class_weight=100-tol=0.001-max_iter=101-sparse=True"
 score_df = pd.read_csv(f"{save_name}_scores.csv", index_col=0)
-score_df.index.name = "iteration"
+# score_df.index.name = "iteration"
 score_df = score_df.reset_index()
 
 
@@ -150,3 +149,5 @@ ax.set_xlabel("MDS 2")
 # ax.set_yticks([])
 
 sns.move_legend(ax, "upper right", bbox_to_anchor=(1.35, 1), title="Iteration")
+
+# %%

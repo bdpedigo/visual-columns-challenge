@@ -1,0 +1,5 @@
+---
+title: "Visual Columns Mapping Challenge"
+---
+
+Documenting my attempts for the codex [Visual Columns Mapping Challenge](https://codex.flywire.ai/app/visual_columns_challenge).

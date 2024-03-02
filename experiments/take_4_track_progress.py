@@ -10,6 +10,12 @@
 # the block diagonal equal to the average one of these column subgraphs
 # i doubt this will do better on the actual problem, but it could be interesting!
 
+# TODO consider a version of this where there is a penalty for not matching a node?
+# or is that already implicit somehow?
+
+# TODO consider adding a regularization barycentric term to the solutions, or maybe
+# only doing so when one gets stuck, or stuck in a cycle
+
 # %%
 import pickle
 import time
@@ -349,7 +355,7 @@ print()
 
 
 max_iter = 100
-class_weight = 120  # 150
+class_weight = 150  # 150
 n_init = 1
 tol = 0.001
 sparse = True
@@ -372,7 +378,7 @@ last_perm = np.arange(B_input.shape[0])
 max_stable_steps = 5
 stable_step_counter = 0
 all_time = time.time()
-for i in range(max_iter):
+for i in range(1, max_iter + 1):
     print("Iteration:", i)
     currtime = time.time()
     result = graph_match(
@@ -389,7 +395,8 @@ for i in range(max_iter):
         fast=True,
         n_jobs=1,
     )
-    print(f"{time.time() - currtime:.3f} seconds elapsed to solve")
+    solve_time = time.time() - currtime
+    print(f"{solve_time:.3f} seconds elapsed to solve")
 
     last_solution = result.misc[0]["convex_solution"]
 
@@ -423,6 +430,8 @@ for i in range(max_iter):
         "corrected_n_matched": corrected_n_matched,
         "corrected_violations": corrected_violations,
         "swaps_from_last": swaps,
+        "iteration": i,
+        "time": solve_time,
     }
     scores.append(iter_scores)
     print("Iteration scores:")
