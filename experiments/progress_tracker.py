@@ -48,7 +48,9 @@ for i, row in real_file_df.iterrows():
 
 all_scores = pd.concat(dfs, ignore_index=False)
 all_scores["iteration"] = all_scores.index.copy() + 1
+# all_scores['class_weight'] = all_scores['class_weight'].astype(int)
 all_scores = all_scores.reset_index(drop=True)
+all_scores = all_scores.query("class_weight != '120'")
 # %%
 baseline_n_synapses = 1_383_531
 baseline_n_matched = 22_578
@@ -57,11 +59,11 @@ import seaborn as sns
 
 benchmark_kws = dict(color="black", linestyle="--", label="Benchmark", linewidth=1.5)
 
-fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-sns.lineplot(data=all_scores, x="iteration", y="n_within_group", hue="class_weight")
+# fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+# sns.lineplot(data=all_scores, x="iteration", y="n_within_group", hue="class_weight")
 
-ax.set_ylabel("Within group synapses")
-ax.set_xlabel("Iteration")
+# ax.set_ylabel("Within group synapses")
+# ax.set_xlabel("Iteration")
 
 fig, ax = plt.subplots(1, 1, figsize=(5, 5))
 sns.lineplot(
@@ -74,11 +76,39 @@ ax.set_xlabel("Iteration")
 ax.axhline(baseline_n_synapses, **benchmark_kws)
 
 fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-sns.lineplot(data=all_scores, x="iteration", y="n_matched", hue="class_weight")
+sns.lineplot(
+    data=all_scores, x="iteration", y="corrected_n_matched", hue="class_weight"
+)
 
 ax.set_ylabel("# cells matched")
 ax.set_xlabel("Iteration")
 
 ax.axhline(baseline_n_matched, **benchmark_kws)
+
+# %%
+fig, axs = plt.subplots(1, 2, figsize=(10, 5), constrained_layout=True)
+ax = axs[0]
+sns.lineplot(
+    data=all_scores.query("iteration > 10"),
+    x="iteration",
+    y="corrected_n_within_group",
+    hue="class_weight",
+    ax=ax
+)
+
+ax.set_ylabel("Within group synapses")
+ax.set_xlabel("Iteration")
+
+ax = axs[1]
+sns.lineplot(
+    data=all_scores.query("iteration > 10"),
+    x="iteration",
+    y="corrected_n_matched",
+    hue="class_weight",
+    ax=ax
+)
+
+ax.set_ylabel("# cells matched")
+ax.set_xlabel("Iteration")
 
 # %%

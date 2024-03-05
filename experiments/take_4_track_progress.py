@@ -31,6 +31,7 @@ from scipy.sparse import csr_array
 from graspologic.match import graph_match
 
 DATA_PATH = Path("visual-columns-challenge/data/")
+OUT_PATH = Path("visual-columns-challenge/results/")
 
 columns_df = pd.read_csv(DATA_PATH / "ol_columns.csv")
 columns_df.rename(columns=lambda x: x.replace(" ", "_"), inplace=True)
@@ -187,7 +188,31 @@ A = nf.to_adjacency(weight_col="weight").values.astype(float)
 S = pd.DataFrame(index=nf.nodes.index, columns=target_nodes.index, dtype=float).fillna(
     0.0
 )
-S = nf.nodes["cell_type"].values[:, None] == target_nodes["cell_type"].values[None, :]
+
+# %%
+only_real_constraint = False
+if only_real_constraint:
+    # only want to reward matching a real node to a target node
+    node_mask = nf.nodes["node_type"].values == "real"
+    target_mask = target_nodes["node_type"].values == "target"
+    mask = node_mask[:, None] & target_mask[None, :]
+
+    # only want to reward matching nodes of the same cell type
+    node_cell_type = nf.nodes["cell_type"].values
+    target_cell_type = target_nodes["cell_type"].values
+    matching_cell_types = node_cell_type[:, None] == target_cell_type[None, :]
+
+    S = mask & matching_cell_types
+
+else:
+    S = (
+        nf.nodes["cell_type"].values[:, None]
+        == target_nodes["cell_type"].values[None, :]
+    )
+
+
+# %%
+
 S = S.astype(float)
 
 
@@ -353,9 +378,10 @@ print(old_n_matched)
 print(old_violations)
 print()
 
+# %%
 
 max_iter = 100
-class_weight = 150  # 150
+class_weight = 50  # 150
 n_init = 1
 tol = 0.001
 sparse = True
@@ -442,24 +468,24 @@ for i in range(1, max_iter + 1):
     results_by_iter.append(result)
 
     score_df = pd.DataFrame(scores)
-    score_df.to_csv(f"{save_name}_scores.csv")
+    score_df.to_csv(OUT_PATH / f"{save_name}_scores.csv")
 
     if stable_step_counter >= max_stable_steps:
         print("Converged!")
         break
 
 
-with open(f"{save_name}_final_result.pkl", "wb") as f:
-    result.misc[0]["convex_solution"] = None
+with open(OUT_PATH / f"{save_name}_final_result.pkl", "wb") as f:
+    # result.misc[0]["convex_solution"] = None
     pickle.dump(result, f)
 
-with open(f"{save_name}_results_by_iter.pkl", "wb") as f:
+with open(OUT_PATH / f"{save_name}_results_by_iter.pkl", "wb") as f:
     pickle.dump(results_by_iter, f)
 
 
-matched_nf.nodes.to_csv(f"{save_name}-matched_nodes.csv")
-corrected_nf.nodes.to_csv(f"{save_name}-corrected_nodes.csv")
-target_nodes.to_csv(f"{save_name}-target_nodes.csv")
+matched_nf.nodes.to_csv(OUT_PATH / f"{save_name}-matched_nodes.csv")
+corrected_nf.nodes.to_csv(OUT_PATH / f"{save_name}-corrected_nodes.csv")
+target_nodes.to_csv(OUT_PATH / f"{save_name}-target_nodes.csv")
 
 print("\n---")
 print(f"{time.time() - all_time:.3f} seconds elapsed in total")
