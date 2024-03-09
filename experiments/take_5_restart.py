@@ -1,5 +1,3 @@
-# TODO look into sweeping over the weighting of AB vs S terms
-
 # TODO FAQ-2-opt: do some kind of optimize, perturb, optimize, perturb scheme
 # should be easy to implement with an outer loop and a literal permutation of the input
 # myself
@@ -379,8 +377,8 @@ print()
 
 # %%
 
-max_iter = 100
-class_weight = 50  # 150
+max_iter = 1
+class_weight = 75  # 150
 n_init = 1
 tol = 0.001
 sparse = True
@@ -394,12 +392,30 @@ else:
     B_input = B
     S_input = S
 
-save_name = f"test={test}-class_weight={class_weight}-tol={tol}-max_iter={max_iter}-sparse={sparse}"
+reload_name = "test=False-class_weight=75-tol=0.001-max_iter=100-sparse=True"
+
+with open(OUT_PATH / f"{reload_name}_final_result.pkl", "rb") as f:
+    result = pickle.load(f)
+
+indices_A = result.indices_A
+indices_B = result.indices_B
+
+# %%
+
+save_name = (
+    f"class_weight={class_weight}-max_iter={max_iter}-restart={reload_name is not None}"
+)
 
 results_by_iter = []
 scores = []
 last_solution = np.eye(A_input.shape[0])
-last_perm = np.arange(B_input.shape[0])
+
+if reload_name is not None:
+    last_solution = last_solution[indices_A][:, indices_B]
+    last_perm = indices_B
+else:
+    last_perm = np.arange(B_input.shape[0])
+
 max_stable_steps = 5
 stable_step_counter = 0
 all_time = time.time()
@@ -463,7 +479,7 @@ for i in range(1, max_iter + 1):
     print(iter_scores)
     print()
 
-    result.misc[0]["convex_solution"] = None
+    # result.misc[0]["convex_solution"] = None
     results_by_iter.append(result)
 
     score_df = pd.DataFrame(scores)

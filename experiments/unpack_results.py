@@ -16,7 +16,7 @@ class_weight = 175
 n_init = 1
 tol = 0.001
 sparse = True
-save_name = "visual-columns-challenge/results/test=False-class_weight=100-tol=0.001-max_iter=101-sparse=True"
+save_name = "visual-columns-challenge/results/class_weight=75-max_iter=100-restart=True"
 score_df = pd.read_csv(f"{save_name}_scores.csv", index_col=0)
 # score_df.index.name = "iteration"
 score_df = score_df.reset_index()
@@ -62,7 +62,7 @@ sns.heatmap(all_diff_df, cmap="viridis")
 
 # %%
 
-diff_df = all_diff_df.loc[10:, 10:]
+diff_df = all_diff_df.loc[15:, 15:]
 
 scores = pd.Series(
     index=np.arange(len(results_by_iter)),
@@ -151,3 +151,7 @@ ax.set_xlabel("MDS 2")
 sns.move_legend(ax, "upper right", bbox_to_anchor=(1.35, 1), title="Iteration")
 
 # %%
+
+
+with open(f"{save_name}_final_result.pkl", "rb") as f:
+    final_result = pickle.load(f)
