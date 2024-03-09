@@ -11,37 +11,37 @@ from .metrics import cell_to_column_crosstab
 def add_fake_nodes(nf: NetworkFrame, label_feature: str = "column_id") -> None:
     cell_to_label_counts = cell_to_column_crosstab(nf.nodes, label_feature, dropna=True)
 
-    add_fake_nodes = True
-    if add_fake_nodes:
-        i = 1
-        fake_nodes = []
-        missing_cell_ilocs = np.argwhere(cell_to_label_counts == 0)
-        for cell_type_iloc, column_id_iloc in missing_cell_ilocs:
-            cell_type = cell_to_label_counts.index[cell_type_iloc]
-            column_id = cell_to_label_counts.columns[column_id_iloc]
-            fake_nodes.append(
-                {
-                    "cell_id": -i,
-                    "column_id": column_id,
-                    "cell_type": cell_type,
-                    "node_type": "fake",
-                }
-            )
-            i += 1
 
-        fake_nodes = pd.DataFrame(fake_nodes)
-        fake_nodes.set_index("cell_id", inplace=True)
-        fake_nodes
+    i = 1
+    fake_nodes = []
+    missing_cell_ilocs = np.argwhere(cell_to_label_counts == 0)
+    for cell_type_iloc, column_id_iloc in missing_cell_ilocs:
+        cell_type = cell_to_label_counts.index[cell_type_iloc]
+        column_id = cell_to_label_counts.columns[column_id_iloc]
+        fake_nodes.append(
+            {
+                "cell_id": -i,
+                "column_id": column_id,
+                "cell_type": cell_type,
+                "node_type": "fake",
+            }
+        )
+        i += 1
 
-        nf.add_nodes(fake_nodes, inplace=True)
+    fake_nodes = pd.DataFrame(fake_nodes)
+    fake_nodes.set_index("cell_id", inplace=True)
+    fake_nodes
+
+    nf.add_nodes(fake_nodes, inplace=True)
 
 
 def create_target_nodes(nf: NetworkFrame) -> pd.DataFrame:
+    n_columns = nf.nodes["column_id"].nunique()
     dummy_labels = np.concatenate(
-        [np.full(N_TYPES, i) for i in range(1, N_COLUMNS + 1)]
+        [np.full(N_TYPES, i) for i in range(1, n_columns + 1)]
     )
     uni_cell_types = np.unique(nf.nodes["cell_type"])
-    dummy_cell_types = np.concatenate([uni_cell_types for _ in range(N_COLUMNS)])
+    dummy_cell_types = np.concatenate([uni_cell_types for _ in range(n_columns)])
     target_nodes = pd.DataFrame(
         {
             "cell_type": dummy_cell_types,
@@ -52,7 +52,7 @@ def create_target_nodes(nf: NetworkFrame) -> pd.DataFrame:
     target_nodes
 
     cell_type_counts = nf.nodes["cell_type"].value_counts().sort_index()
-    cell_type_extras = cell_type_counts - N_COLUMNS
+    cell_type_extras = cell_type_counts - n_columns
 
     extra_nodes = pd.DataFrame(
         {

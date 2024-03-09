@@ -37,10 +37,10 @@ def load_networkframe(sample=False, seed=8888):
 
     nf.nodes["node_type"] = "real"
 
-    if sample:
+    if sample > 0:
         np.random.seed(seed)
 
-        n_select_columns = 10
+        n_select_columns = sample
         select_cols = np.random.choice(
             np.arange(1, N_COLUMNS + 1), size=n_select_columns, replace=False
         )

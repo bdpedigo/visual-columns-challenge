@@ -1,6 +1,7 @@
 from .constants import N_COLUMNS, N_TYPES
 from .load_data import load_networkframe
-from .metrics import cell_to_column_crosstab
+from .metrics import cell_to_column_crosstab, compute_metrics
+from .paths import DATA_PATH, OUT_PATH
 from .wrangle import (
     add_fake_nodes,
     correct_violations,
@@ -10,13 +11,16 @@ from .wrangle import (
 )
 
 __all__ = [
-    "N_COLUMNS",
-    "N_TYPES",
-    "load_networkframe",
     "add_fake_nodes",
-    "create_target_nodes",
+    "cell_to_column_crosstab",
     "correct_violations",
+    "compute_metrics",
     "create_matched_networkframe",
     "create_matching_target",
-    "cell_to_column_crosstab",
+    "create_target_nodes",
+    "DATA_PATH",
+    "load_networkframe",
+    "N_COLUMNS",
+    "N_TYPES",
+    "OUT_PATH",
 ]

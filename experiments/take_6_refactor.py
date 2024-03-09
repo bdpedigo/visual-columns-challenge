@@ -25,7 +25,6 @@ import seaborn as sns
 from pkg import (
     OUT_PATH,
     add_fake_nodes,
-    cell_to_column_crosstab,
     compute_metrics,
     correct_violations,
     create_matched_networkframe,
@@ -37,30 +36,20 @@ from scipy.sparse import csr_array
 
 from graspologic.match import graph_match
 
+test = False
 nf = load_networkframe()
 
-
-# %%
-
 label_feature = "column_id"
-cell_to_label_counts = cell_to_column_crosstab(nf.nodes, label_feature)
-
-# %%
-
 
 add_fake_nodes(nf, label_feature)
 target_nodes = create_target_nodes(nf)
 B = create_matching_target(target_nodes)
 
-# %%
-
 nf.nodes.sort_values(["column_id", "cell_type"], inplace=True)
-nf.nodes
 
 # %%
 
 A = nf.to_adjacency(weight_col="weight").values.astype(float)
-
 
 # %%
 
@@ -88,10 +77,6 @@ else:
         nf.nodes["cell_type"].values[:, None]
         == target_nodes["cell_type"].values[None, :]
     )
-
-
-# %%
-
 S = S.astype(float)
 
 
@@ -168,12 +153,14 @@ else:
     S_input = S
 
 reload_name = "test=False-class_weight=75-tol=0.001-max_iter=100-sparse=True"
+reload_name = None
 
-with open(OUT_PATH / f"{reload_name}_final_result.pkl", "rb") as f:
-    result = pickle.load(f)
+if reload_name is not None:
+    with open(OUT_PATH / f"{reload_name}_final_result.pkl", "rb") as f:
+        result = pickle.load(f)
 
-indices_A = result.indices_A
-indices_B = result.indices_B
+    indices_A = result.indices_A
+    indices_B = result.indices_B
 
 # %%
 
@@ -224,7 +211,7 @@ for i in range(1, max_iter + 1):
     else:
         stable_step_counter = 0
 
-    matched_nf = create_matched_networkframe(nf, result)
+    matched_nf = create_matched_networkframe(nf, result, target_nodes)
 
     new_n_within_group, new_n_matched, new_violations = compute_metrics(
         matched_nf, "predicted_column_id"
