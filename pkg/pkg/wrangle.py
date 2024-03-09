@@ -2,11 +2,13 @@ import numpy as np
 import pandas as pd
 from networkframe import NetworkFrame
 
+from graspologic.match.wrappers import MatchResult
+
 from .constants import N_COLUMNS, N_TYPES
 from .metrics import cell_to_column_crosstab
 
 
-def add_fake_nodes(nf, label_feature="column_id"):
+def add_fake_nodes(nf: NetworkFrame, label_feature: str = "column_id") -> None:
     cell_to_label_counts = cell_to_column_crosstab(nf.nodes, label_feature, dropna=True)
 
     add_fake_nodes = True
@@ -34,7 +36,7 @@ def add_fake_nodes(nf, label_feature="column_id"):
         nf.add_nodes(fake_nodes, inplace=True)
 
 
-def create_target_nodes(nf):
+def create_target_nodes(nf: NetworkFrame) -> pd.DataFrame:
     dummy_labels = np.concatenate(
         [np.full(N_TYPES, i) for i in range(1, N_COLUMNS + 1)]
     )
@@ -67,7 +69,7 @@ def create_target_nodes(nf):
     return target_nodes
 
 
-def create_matching_target(target_nodes):
+def create_matching_target(target_nodes: pd.DataFrame) -> np.ndarray:
     target_labels = target_nodes["column_id"].fillna(-1).values
     mask = (target_labels[:, None] == target_labels[None, :]).astype(float)
     not_fake = (target_nodes["column_id"].notna()).values
@@ -77,7 +79,9 @@ def create_matching_target(target_nodes):
     return B
 
 
-def create_matched_networkframe(nf, result, target_nodes):
+def create_matched_networkframe(
+    nf: NetworkFrame, result: MatchResult, target_nodes: pd.DataFrame
+) -> NetworkFrame:
     indices_A = result.indices_A
     indices_B = result.indices_B
 
@@ -101,7 +105,7 @@ def create_matched_networkframe(nf, result, target_nodes):
     return matched_nf
 
 
-def correct_violations(nf, label_feature):
+def correct_violations(nf: NetworkFrame, label_feature: str) -> NetworkFrame:
     edges = nf.apply_node_features(label_feature).edges
     within_group_edges = edges.query(
         f"source_{label_feature} == target_{label_feature}"
@@ -128,7 +132,7 @@ def correct_violations(nf, label_feature):
         column_id = cell_to_label_counts.columns[column_id_iloc]  # noqa: F841
         cell_type
         column_id
-        
+
         conflicting_nodes = nodes.query(
             "cell_type == @cell_type & predicted_column_id == @column_id"
         )
