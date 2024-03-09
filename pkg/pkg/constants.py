@@ -1,0 +1,2 @@
+N_TYPES = 31
+N_COLUMNS = 796
