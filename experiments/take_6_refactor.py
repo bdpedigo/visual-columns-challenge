@@ -1,27 +1,14 @@
-# TODO FAQ-2-opt: do some kind of optimize, perturb, optimize, perturb scheme
-# should be easy to implement with an outer loop and a literal permutation of the input
-# myself
-
-# TODO look into an adopted padding version of this? could that matter here
-
 # TODO could iteratively refine the actual subgraph that one is looking for, i.e. make
 # the block diagonal equal to the average one of these column subgraphs
 # i doubt this will do better on the actual problem, but it could be interesting!
 
-# TODO consider a version of this where there is a penalty for not matching a node?
-# or is that already implicit somehow?
-
-# TODO consider adding a regularization barycentric term to the solutions, or maybe
-# only doing so when one gets stuck, or stuck in a cycle
 
 # %%
 import pickle
 import time
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 from pkg import (
     OUT_PATH,
     add_fake_nodes,
@@ -31,13 +18,17 @@ from pkg import (
     create_matching_target,
     create_target_nodes,
     load_networkframe,
+    plot_matched_matrices,
 )
 from scipy.sparse import csr_array
 
 from graspologic.match import graph_match
 
 test = False
-nf = load_networkframe()
+if test:
+    nf = load_networkframe(sample=10)
+else:
+    nf = load_networkframe()
 
 label_feature = "column_id"
 
@@ -83,44 +74,7 @@ S = S.astype(float)
 # %%
 
 if test:
-    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
-
-    sns.heatmap(
-        A > 0,
-        ax=axs[0],
-        cmap="RdBu_r",
-        center=0,
-        cbar=False,
-        xticklabels=False,
-        yticklabels=False,
-        square=True,
-    )
-    axs[0].set_title("A")
-
-    sns.heatmap(
-        B,
-        ax=axs[1],
-        cmap="RdBu_r",
-        center=0,
-        cbar=False,
-        xticklabels=False,
-        yticklabels=False,
-        square=True,
-    )
-
-    axs[1].set_title("B")
-
-    sns.heatmap(
-        S,
-        ax=axs[2],
-        cmap="RdBu_r",
-        center=0,
-        cbar=False,
-        xticklabels=False,
-        yticklabels=False,
-        square=True,
-    )
-    axs[2].set_title("S")
+    fig, axs = plot_matched_matrices(A, B, S)
 
 # %%
 
@@ -139,45 +93,60 @@ print()
 
 max_iter = 1
 class_weight = 75  # 150
-n_init = 1
 tol = 0.001
-sparse = True
 
-if sparse:
-    A_input = csr_array(A)
-    B_input = csr_array(B)
-    S_input = csr_array(S)
-else:
-    A_input = A
-    B_input = B
-    S_input = S
+A_input = csr_array(A)
+B_input = csr_array(B)
+S_input = csr_array(S)
 
-reload_name = "test=False-class_weight=75-tol=0.001-max_iter=100-sparse=True"
-reload_name = None
+# reload_name = None
+reload_from = "test=False-class_weight=75-tol=0.001-max_iter=100-sparse=True"
+reload = reload_from is not None
+reload_from_iter = -1
 
-if reload_name is not None:
-    with open(OUT_PATH / f"{reload_name}_final_result.pkl", "rb") as f:
-        result = pickle.load(f)
+if reload_from is not None:
+    with open(OUT_PATH / f"{reload_from}_results_by_iter.pkl", "rb") as f:
+        results_by_iter = pickle.load(f)
+
+        result = results_by_iter[reload_from_iter]
 
     indices_A = result.indices_A
     indices_B = result.indices_B
+# %%
+experiment_params = {
+    "max_iter": max_iter,
+    "class_weight": class_weight,
+    "tol": tol,
+    "reload_from": reload_from,
+    "reload_from_iter": reload_from_iter,
+    "reload": reload,
+}
+experiment_id = int(time.time())
+experiment_df = pd.Series(experiment_params, name=experiment_id).to_frame().T
+
+try:
+    manifest = pd.read_csv(OUT_PATH / "experiment_manifest.csv", index_col=0)
+except pd.errors.EmptyDataError:
+    manifest = pd.DataFrame()
+manifest = pd.concat([manifest, experiment_df], axis=0)
+manifest.index.name = "experiment_id"
+manifest.to_csv(OUT_PATH / "experiment_manifest.csv")
 
 # %%
 
-save_name = (
-    f"class_weight={class_weight}-max_iter={max_iter}-restart={reload_name is not None}"
-)
+save_name = str(experiment_id)
 
 results_by_iter = []
 scores = []
 last_solution = np.eye(A_input.shape[0])
 
-if reload_name is not None:
+if reload_from is not None:
     last_solution = last_solution[indices_A][:, indices_B]
     last_perm = indices_B
 else:
     last_perm = np.arange(B_input.shape[0])
 
+n_init = 1
 max_stable_steps = 5
 stable_step_counter = 0
 all_time = time.time()
@@ -202,6 +171,9 @@ for i in range(1, max_iter + 1):
     print(f"{solve_time:.3f} seconds elapsed to solve")
 
     last_solution = result.misc[0]["convex_solution"]
+    sparse_soln = csr_array(result.misc[0]["convex_solution"])
+    nnz = sparse_soln.nnz
+    print(f"Solution nnz: {nnz}")
 
     swaps = (last_perm != result.indices_B).sum()
     last_perm = result.indices_B
@@ -244,25 +216,25 @@ for i in range(1, max_iter + 1):
     # result.misc[0]["convex_solution"] = None
     results_by_iter.append(result)
 
-    score_df = pd.DataFrame(scores)
-    score_df.to_csv(OUT_PATH / f"{save_name}_scores.csv")
+    if not test:
+        score_df = pd.DataFrame(scores)
+        score_df.to_csv(OUT_PATH / f"{save_name}_scores.csv")
 
     if stable_step_counter >= max_stable_steps:
         print("Converged!")
         break
 
+if not test:
+    with open(OUT_PATH / f"{save_name}_final_result.pkl", "wb") as f:
+        # result.misc[0]["convex_solution"] = None
+        pickle.dump(result, f)
 
-with open(OUT_PATH / f"{save_name}_final_result.pkl", "wb") as f:
-    # result.misc[0]["convex_solution"] = None
-    pickle.dump(result, f)
+    with open(OUT_PATH / f"{save_name}_results_by_iter.pkl", "wb") as f:
+        pickle.dump(results_by_iter, f)
 
-with open(OUT_PATH / f"{save_name}_results_by_iter.pkl", "wb") as f:
-    pickle.dump(results_by_iter, f)
-
-
-matched_nf.nodes.to_csv(OUT_PATH / f"{save_name}-matched_nodes.csv")
-corrected_nf.nodes.to_csv(OUT_PATH / f"{save_name}-corrected_nodes.csv")
-target_nodes.to_csv(OUT_PATH / f"{save_name}-target_nodes.csv")
+    matched_nf.nodes.to_csv(OUT_PATH / f"{save_name}-matched_nodes.csv")
+    corrected_nf.nodes.to_csv(OUT_PATH / f"{save_name}-corrected_nodes.csv")
+    target_nodes.to_csv(OUT_PATH / f"{save_name}-target_nodes.csv")
 
 print("\n---")
 print(f"{time.time() - all_time:.3f} seconds elapsed in total")
@@ -271,31 +243,4 @@ print("---\n")
 
 # %%
 if test:
-    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
-
-    sns.heatmap(
-        A[result.indices_A][:, result.indices_A] > 0,
-        ax=axs[0],
-        cbar=False,
-        square=True,
-        cmap="RdBu_r",
-        center=0,
-    )
-
-    sns.heatmap(
-        B[result.indices_B][:, result.indices_B],
-        ax=axs[1],
-        cbar=False,
-        square=True,
-        cmap="RdBu_r",
-        center=0,
-    )
-
-    sns.heatmap(
-        S[result.indices_A][:, result.indices_B],
-        ax=axs[2],
-        cbar=False,
-        square=True,
-        cmap="RdBu_r",
-        center=0,
-    )
+    plot_matched_matrices(A, B, S, result)

@@ -9,6 +9,7 @@ from .wrangle import (
     create_matching_target,
     create_target_nodes,
 )
+from .plot import plot_matched_matrices
 
 __all__ = [
     "add_fake_nodes",
@@ -23,4 +24,5 @@ __all__ = [
     "N_COLUMNS",
     "N_TYPES",
     "OUT_PATH",
+    "plot_matched_matrices"
 ]
