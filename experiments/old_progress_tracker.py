@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-result_dir = Path("visual-columns-challenge/results")
+result_dir = Path("visual-columns-challenge/results/old")
 
 # use glob to find all files that end in _scores.csv
 score_files = glob.glob(os.path.join(result_dir, "*_scores.csv"))
@@ -170,4 +170,6 @@ with open(result_dir / f"{file_prefix}_results_by_iter.pkl", "rb") as f:
 
 result = results_by_iter[iteration]
 
+# %%
+row
 # %%

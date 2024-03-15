@@ -50,25 +50,24 @@ S = pd.DataFrame(index=nf.nodes.index, columns=target_nodes.index, dtype=float).
 )
 
 # %%
-only_real_constraint = False
-if only_real_constraint:
-    # only want to reward matching a real node to a target node
+
+# only reward matching nodes of the same cell type
+node_cell_type = nf.nodes["cell_type"].values
+target_cell_type = target_nodes["cell_type"].values
+S = node_cell_type[:, None] == target_cell_type[None, :]
+
+only_real = True
+if only_real:
+    # only reward matching a real node
     node_mask = nf.nodes["node_type"].values == "real"
+    S = node_mask[:, None] & S
+
+only_target = False
+if only_target:
+    # only reward matching to an actual target node
     target_mask = target_nodes["node_type"].values == "target"
-    mask = node_mask[:, None] & target_mask[None, :]
+    S = S & target_mask[None, :]
 
-    # only want to reward matching nodes of the same cell type
-    node_cell_type = nf.nodes["cell_type"].values
-    target_cell_type = target_nodes["cell_type"].values
-    matching_cell_types = node_cell_type[:, None] == target_cell_type[None, :]
-
-    S = mask & matching_cell_types
-
-else:
-    S = (
-        nf.nodes["cell_type"].values[:, None]
-        == target_nodes["cell_type"].values[None, :]
-    )
 S = S.astype(float)
 
 
@@ -92,7 +91,7 @@ print()
 
 # %%
 
-max_iter = 1
+max_iter = 10
 class_weight = 75  # 150
 tol = 0.001
 
@@ -197,6 +196,8 @@ iter_scores = {
     "corrected_n_within_group": corrected_n_within_group,
     "corrected_n_matched": corrected_n_matched,
     "corrected_violations": corrected_violations,
+    "only_real": only_real,
+    "only_target": only_target,
     "swaps_from_last": 0,
     "iteration": 0,
     "time": 0,
@@ -262,6 +263,8 @@ for i in range(1, max_iter + 1):
         "corrected_n_within_group": corrected_n_within_group,
         "corrected_n_matched": corrected_n_matched,
         "corrected_violations": corrected_violations,
+        "only_real": only_real,
+        "only_target": only_target,
         "swaps_from_last": swaps,
         "iteration": i,
         "time": solve_time,
