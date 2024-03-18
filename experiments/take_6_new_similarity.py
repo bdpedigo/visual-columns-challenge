@@ -62,7 +62,7 @@ if only_real:
     node_mask = nf.nodes["node_type"].values == "real"
     S = node_mask[:, None] & S
 
-only_target = False
+only_target = True
 if only_target:
     # only reward matching to an actual target node
     target_mask = target_nodes["node_type"].values == "target"
@@ -91,7 +91,7 @@ print()
 
 # %%
 
-max_iter = 10
+max_iter = 100
 class_weight = 75  # 150
 tol = 0.001
 
@@ -102,9 +102,10 @@ S_input = csr_array(S)
 # reload_name = None
 # reload_from = "test=False-class_weight=75-tol=0.001-max_iter=100-sparse=True"
 # reload_from = "1710535591"
-reload_from = "class_weight=75-max_iter=100-restart=True"
+# reload_from = "class_weight=75-max_iter=100-restart=True"
+reload_from = "1710544091"
 reload = reload_from is not None
-reload_from_iter = 67
+reload_from_iter = -1
 
 if reload_from is not None:
     load_path = OUT_PATH
@@ -201,8 +202,14 @@ iter_scores = {
     "swaps_from_last": 0,
     "iteration": 0,
     "time": 0,
+    "nnz": np.count_nonzero(last_solution),
 }
 scores.append(iter_scores)
+
+print()
+print("Initial scores:")
+print(iter_scores)
+print()
 
 n_init = 1
 max_stable_steps = 5
@@ -231,11 +238,9 @@ for i in range(1, max_iter + 1):
     last_solution = result.misc[0]["convex_solution"]
     sparse_soln = csr_array(result.misc[0]["convex_solution"])
     nnz = sparse_soln.nnz
-    print(f"Solution nnz: {nnz}")
 
     swaps = (last_perm != result.indices_B).sum()
     last_perm = result.indices_B
-    print(f"Swaps: {swaps}")
     if swaps == 0:
         stable_step_counter += 1
     else:
@@ -268,8 +273,10 @@ for i in range(1, max_iter + 1):
         "swaps_from_last": swaps,
         "iteration": i,
         "time": solve_time,
+        "nnz": nnz,
     }
     scores.append(iter_scores)
+    print()
     print("Iteration scores:")
     print(iter_scores)
     print()
@@ -281,14 +288,14 @@ for i in range(1, max_iter + 1):
         score_df = pd.DataFrame(scores)
         score_df.to_csv(out_path / f"{save_name}_scores.csv")
 
-        # open all_scores.csv and append a new row
-        with open(OUT_PATH / "all_scores.csv", "a") as f:
-            score_df.to_csv(f, header=f.tell() == 0)
+        # # open all_scores.csv and append a new row
+        # with open(OUT_PATH / "all_scores.csv", "a") as f:
+        #     score_df.to_csv(f, header=f.tell() == 0)
 
     if stable_step_counter >= max_stable_steps:
         print("Converged!")
         break
-
+print()
 if not test:
     with open(out_path / f"{save_name}_final_result.pkl", "wb") as f:
         # result.misc[0]["convex_solution"] = None

@@ -6,8 +6,10 @@ from .constants import N_COLUMNS
 from .paths import DATA_PATH
 
 
-def load_networkframe(sample=False, seed=8888):
-    columns_df = pd.read_csv(DATA_PATH / "ol_columns.csv")
+def load_networkframe(sample=False, seed=8888, path=None):
+    if path is None: 
+        path = DATA_PATH / "ol_columns.csv"
+    columns_df = pd.read_csv(path)
     columns_df.rename(columns=lambda x: x.replace(" ", "_"), inplace=True)
     columns_df.set_index("cell_id", inplace=True)
 
