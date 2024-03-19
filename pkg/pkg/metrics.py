@@ -11,6 +11,9 @@ def cell_to_column_crosstab(nodes, label_feature="column_id", dropna=False):
 
 def compute_metrics(nf, label_feature):
     edges = nf.apply_node_features(label_feature).edges
+    edges = edges.query("source != target")
+    edges = edges.query(f"~source_{label_feature}.isna()")
+    edges = edges.query(f"~target_{label_feature}.isna()")
     n_within_group = edges.query(f"source_{label_feature} == target_{label_feature}")[
         "weight"
     ].sum()
