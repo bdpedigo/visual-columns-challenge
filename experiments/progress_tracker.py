@@ -7,8 +7,18 @@ import pandas as pd
 result_dir = Path("visual-columns-challenge/results/")
 
 # %%
-score_df = pd.read_csv(result_dir / "all_scores.csv")
+score_df = pd.read_csv(result_dir / "old_all_scores.csv")
 score_df
+
+#%%
+score_df['n_within_group'].max()
+score_df['n_within_group'].idxmax()
+
+#%%
+score_df.loc[(0, 1710544091, 1398794)]
+
+#%%
+
 
 # %%
 

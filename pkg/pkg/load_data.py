@@ -7,7 +7,7 @@ from .paths import DATA_PATH
 
 
 def load_networkframe(sample=False, seed=8888, path=None):
-    if path is None: 
+    if path is None:
         path = DATA_PATH / "ol_columns.csv"
     columns_df = pd.read_csv(path)
     columns_df.rename(columns=lambda x: x.replace(" ", "_"), inplace=True)
@@ -20,6 +20,17 @@ def load_networkframe(sample=False, seed=8888, path=None):
 
     columns_df["column_id"] = columns_df["column_id"].map(remapper)
     columns_df["column_id"] = columns_df["column_id"].astype("Int64")
+
+    annotations_file = DATA_PATH / "Supplemental_file1_neuron_annotations.tsv"
+    annotations = pd.read_csv(annotations_file, sep="\t", low_memory=False)
+    annotations.set_index("root_id", inplace=True)
+    columns_df = columns_df.join(
+        annotations["cell_type"], how="left", rsuffix="_schlegel"
+    )
+    missing_index = columns_df.query("cell_type_schlegel.isna()").index
+    columns_df.loc[missing_index, "cell_type_schlegel"] = columns_df.loc[
+        missing_index, "cell_type"
+    ]
 
     connections_df = pd.read_csv(DATA_PATH / "ol_connections.csv")
     connections_df.rename(columns=lambda x: x.replace(" ", "_"), inplace=True)

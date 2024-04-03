@@ -30,6 +30,7 @@ if test:
     nf = load_networkframe(sample=10)
 else:
     nf = load_networkframe()
+# %%
 
 label_feature = "column_id"
 
@@ -38,6 +39,7 @@ target_nodes = create_target_nodes(nf)
 B = create_matching_target(target_nodes)
 
 nf.nodes.sort_values(["column_id", "cell_type"], inplace=True)
+
 
 # %%
 
@@ -56,13 +58,13 @@ node_cell_type = nf.nodes["cell_type"].values
 target_cell_type = target_nodes["cell_type"].values
 S = node_cell_type[:, None] == target_cell_type[None, :]
 
-only_real = True
+only_real = False
 if only_real:
     # only reward matching a real node
     node_mask = nf.nodes["node_type"].values == "real"
     S = node_mask[:, None] & S
 
-only_target = True
+only_target = False
 if only_target:
     # only reward matching to an actual target node
     target_mask = target_nodes["node_type"].values == "target"
@@ -91,21 +93,18 @@ print()
 
 # %%
 
-max_iter = 100
-class_weight = 75  # 150
+max_iter = 50
+class_weight = 70  # 150
 tol = 0.001
 
 A_input = csr_array(A)
 B_input = csr_array(B)
 S_input = csr_array(S)
 
-# reload_name = None
-# reload_from = "test=False-class_weight=75-tol=0.001-max_iter=100-sparse=True"
-# reload_from = "1710535591"
-# reload_from = "class_weight=75-max_iter=100-restart=True"
-reload_from = "1710544091"
+reload_from = "class_weight=75-max_iter=100-restart=True"
 reload = reload_from is not None
-reload_from_iter = -1
+reload_from_iter = 67
+
 
 if reload_from is not None:
     load_path = OUT_PATH
@@ -130,6 +129,8 @@ experiment_params = {
     "reload_from": reload_from,
     "reload_from_iter": reload_from_iter,
     "reload": reload,
+    "only_real": only_real,
+    "only_target": only_target,
 }
 experiment_id = int(time.time())
 save_name = str(experiment_id)
@@ -197,12 +198,11 @@ iter_scores = {
     "corrected_n_within_group": corrected_n_within_group,
     "corrected_n_matched": corrected_n_matched,
     "corrected_violations": corrected_violations,
-    "only_real": only_real,
-    "only_target": only_target,
     "swaps_from_last": 0,
     "iteration": 0,
     "time": 0,
     "nnz": np.count_nonzero(last_solution),
+    **experiment_params,
 }
 scores.append(iter_scores)
 
@@ -274,6 +274,7 @@ for i in range(1, max_iter + 1):
         "iteration": i,
         "time": solve_time,
         "nnz": nnz,
+        **experiment_params,
     }
     scores.append(iter_scores)
     print()
@@ -287,10 +288,6 @@ for i in range(1, max_iter + 1):
     if not test:
         score_df = pd.DataFrame(scores)
         score_df.to_csv(out_path / f"{save_name}_scores.csv")
-
-        # # open all_scores.csv and append a new row
-        # with open(OUT_PATH / "all_scores.csv", "a") as f:
-        #     score_df.to_csv(f, header=f.tell() == 0)
 
     if stable_step_counter >= max_stable_steps:
         print("Converged!")
