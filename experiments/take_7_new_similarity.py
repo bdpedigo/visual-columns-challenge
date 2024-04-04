@@ -94,7 +94,7 @@ print()
 # %%
 
 max_iter = 100
-class_weight = 110  # 150
+class_weight = 125  # 150
 tol = 0.001
 sparse_position = True
 
