@@ -93,18 +93,28 @@ print()
 
 # %%
 
-max_iter = 50
-class_weight = 70  # 150
+max_iter = 100
+class_weight = 110  # 150
 tol = 0.001
+sparse_position = True
 
 A_input = csr_array(A)
 B_input = csr_array(B)
 S_input = csr_array(S)
 
-reload_from = "class_weight=75-max_iter=100-restart=True"
-reload = reload_from is not None
-reload_from_iter = 67
+# reload_from = "class_weight=75-max_iter=100-restart=True"
+# reload_from_iter = 67
 
+results_by_iter = []
+scores = []
+
+# reload_from = "1712153817"
+# reload_from_iter = 45
+
+reload_from = "1712186023"
+reload_from_iter = 22
+reload_convex = True
+reload = reload_from is not None
 
 if reload_from is not None:
     load_path = OUT_PATH
@@ -115,11 +125,30 @@ if reload_from is not None:
     load_path = load_path / f"{reload_from}_results_by_iter.pkl"
     with open(load_path, "rb") as f:
         results_by_iter = pickle.load(f)
-
-        result = results_by_iter[reload_from_iter]
+        print('reloaded')
+        result = results_by_iter[reload_from_iter - 1]
 
     indices_A = result.indices_A
     indices_B = result.indices_B
+
+    if reload_convex:
+        last_solution = result.misc[0]["convex_solution"].toarray()
+    else:
+        last_solution = np.eye(A_input.shape[0])
+        last_solution = last_solution[indices_A][:, indices_B]
+    last_perm = indices_B
+else:
+    last_solution = np.eye(A_input.shape[0])
+    last_perm = np.arange(B_input.shape[0])
+
+    from graspologic.match.wrappers import MatchResult
+
+    result = MatchResult(
+        indices_A=last_perm,
+        indices_B=last_perm,
+        score=0.0,
+        mist=[{}],
+    )
 
 # %%
 experiment_params = {
@@ -131,6 +160,8 @@ experiment_params = {
     "reload": reload,
     "only_real": only_real,
     "only_target": only_target,
+    "reload_convex": reload_convex,
+    "sparse_position": sparse_position,
 }
 experiment_id = int(time.time())
 save_name = str(experiment_id)
@@ -150,30 +181,6 @@ out_path = OUT_PATH / save_name
 
 if not os.path.exists(out_path):
     os.makedirs(out_path)
-
-
-results_by_iter = []
-scores = []
-last_solution = np.eye(A_input.shape[0])
-
-if reload_from is not None:
-    last_solution = last_solution[indices_A][:, indices_B]
-    last_perm = indices_B
-else:
-    from graspologic.match.wrappers import MatchResult
-
-    last_perm = np.arange(B_input.shape[0])
-
-    result = MatchResult(
-        indices_A=last_perm,
-        indices_B=last_perm,
-        score=0.0,
-        mist=[{}],
-    )
-
-
-# TODO add something here for computing score from the initial solution and storing for
-# iteration "0"
 
 
 matched_nf = create_matched_networkframe(nf, result, target_nodes)
@@ -218,6 +225,8 @@ all_time = time.time()
 for i in range(1, max_iter + 1):
     print("Iteration:", i)
     currtime = time.time()
+    if isinstance(last_solution, csr_array):
+        last_solution = last_solution.toarray()
     result = graph_match(
         A_input,
         B_input,
@@ -231,6 +240,7 @@ for i in range(1, max_iter + 1):
         verbose=5,
         fast=True,
         n_jobs=1,
+        sparse_position=sparse_position,
     )
     solve_time = time.time() - currtime
     print(f"{solve_time:.3f} seconds elapsed to solve")
