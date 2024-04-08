@@ -50,3 +50,5 @@ all_scores.loc[idx]
 all_scores.query("iteration > 5").groupby("class_weight")[
     "corrected_n_within_group"
 ].idxmax()
+
+# %%

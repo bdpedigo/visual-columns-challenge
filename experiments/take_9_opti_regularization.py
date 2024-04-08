@@ -19,17 +19,15 @@ from pkg import (
     create_matching_target,
     create_target_nodes,
     load_networkframe,
-    plot_matched_matrices,
 )
 from scipy.sparse import csr_array
 
 from graspologic.match import graph_match
 
-test = False
-if test:
-    nf = load_networkframe(sample=10)
-else:
-    nf = load_networkframe()
+load_path = "visual-columns-challenge/results/submissions/BP_columns_v1.csv"
+nf = load_networkframe(
+    path=load_path,
+)
 # %%
 
 label_feature = "column_id"
@@ -75,12 +73,6 @@ S = S.astype(float)
 
 # %%
 
-if test:
-    fig, axs = plot_matched_matrices(A, B, S)
-
-# %%
-
-
 benchmark_nf = nf.query_nodes('node_type == "real" & column_id.notna()').copy()
 old_n_within_group, old_n_matched, old_violations = compute_metrics(
     benchmark_nf, "column_id"
@@ -98,7 +90,7 @@ class_weight = 200  # 150
 tol = 0.001
 sparse_position = True
 
-damping_factor = 0.5
+damping_factor = None
 
 A_input = csr_array(A)
 B_input = csr_array(B)
@@ -116,10 +108,18 @@ scores = []
 # reload_from                 1712211078
 # reload_from_iter                    90
 
-reload_from = "1712247272"
-reload_from_iter = 18
-reload_convex = True
+# reload_from = "1712247272"
+# reload_from_iter = 18
+# 1712528432
+reload_from = None
+reload_convex = False
 reload = reload_from is not None
+reload_from_iter = -1
+
+reload_from = "1712528432"
+reload_from_iter = 16
+reload_convex = True
+
 
 if reload_from is not None:
     load_path = OUT_PATH
@@ -152,10 +152,20 @@ else:
         indices_A=last_perm,
         indices_B=last_perm,
         score=0.0,
-        mist=[{}],
+        misc=[{}],
     )
 
+label_masking = False
+if label_masking:
+    labels = target_nodes["cell_type"].values
+else:
+    labels = None
+
 # %%
+
+perturb_steps = 20
+perturb_weight = 0.01
+
 experiment_params = {
     "max_iter": max_iter,
     "class_weight": class_weight,
@@ -168,6 +178,10 @@ experiment_params = {
     "reload_convex": reload_convex,
     "sparse_position": sparse_position,
     "damping_factor": damping_factor,
+    "label_masking": label_masking,
+    "load_path": load_path,
+    "perturb_steps": perturb_steps,
+    "perturb_weight": perturb_weight,
 }
 experiment_id = int(time.time())
 save_name = str(experiment_id)
@@ -214,6 +228,7 @@ iter_scores = {
     "swaps_from_last": 0,
     "iteration": 0,
     "time": 0,
+    "score": result.score,
     "nnz": np.count_nonzero(last_solution),
     **experiment_params,
 }
@@ -224,15 +239,17 @@ print("Initial scores:")
 print(iter_scores)
 print()
 
+bary = np.full((A_input.shape[0], B_input.shape[0]), 1 / B_input.shape[0])
+
 n_init = 1
-max_stable_steps = 5
-stable_step_counter = 0
 all_time = time.time()
 for i in range(1, max_iter + 1):
     print("Iteration:", i)
     currtime = time.time()
     if isinstance(last_solution, csr_array):
         last_solution = last_solution.toarray()
+    if i % perturb_steps == 0:
+        last_solution = (1 - perturb_weight) * last_solution + perturb_weight * bary
     result = graph_match(
         A_input,
         B_input,
@@ -248,7 +265,9 @@ for i in range(1, max_iter + 1):
         n_jobs=1,
         sparse_position=sparse_position,
         damping_factor=damping_factor,
+        labels=labels,
     )
+    assert (result.indices_A == np.arange(A_input.shape[0])).all()
     solve_time = time.time() - currtime
     print(f"{solve_time:.3f} seconds elapsed to solve")
 
@@ -257,11 +276,6 @@ for i in range(1, max_iter + 1):
     nnz = sparse_soln.nnz
 
     swaps = (last_perm != result.indices_B).sum()
-    last_perm = result.indices_B
-    if swaps == 0:
-        stable_step_counter += 1
-    else:
-        stable_step_counter = 0
 
     matched_nf = create_matched_networkframe(nf, result, target_nodes)
 
@@ -290,6 +304,7 @@ for i in range(1, max_iter + 1):
         "swaps_from_last": swaps,
         "iteration": i,
         "time": solve_time,
+        "score": result.score,
         "nnz": nnz,
         **experiment_params,
     }
@@ -302,31 +317,20 @@ for i in range(1, max_iter + 1):
     result.misc[0]["convex_solution"] = csr_array(result.misc[0]["convex_solution"])
     results_by_iter.append(result)
 
-    if not test:
-        score_df = pd.DataFrame(scores)
-        score_df.to_csv(out_path / f"{save_name}_scores.csv")
-
-    if stable_step_counter >= max_stable_steps:
-        print("Converged!")
-        break
 print()
-if not test:
-    with open(out_path / f"{save_name}_final_result.pkl", "wb") as f:
-        # result.misc[0]["convex_solution"] = None
-        pickle.dump(result, f)
+with open(out_path / f"{save_name}_final_result.pkl", "wb") as f:
+    # result.misc[0]["convex_solution"] = None
+    pickle.dump(result, f)
 
-    with open(out_path / f"{save_name}_results_by_iter.pkl", "wb") as f:
-        pickle.dump(results_by_iter, f)
+with open(out_path / f"{save_name}_results_by_iter.pkl", "wb") as f:
+    pickle.dump(results_by_iter, f)
 
-    matched_nf.nodes.to_csv(out_path / f"{save_name}-matched_nodes.csv")
-    corrected_nf.nodes.to_csv(out_path / f"{save_name}-corrected_nodes.csv")
-    target_nodes.to_csv(out_path / f"{save_name}-target_nodes.csv")
+matched_nf.nodes.to_csv(out_path / f"{save_name}-matched_nodes.csv")
+corrected_nf.nodes.to_csv(out_path / f"{save_name}-corrected_nodes.csv")
+target_nodes.to_csv(out_path / f"{save_name}-target_nodes.csv")
 
 print("\n---")
 print(f"{time.time() - all_time:.3f} seconds elapsed in total")
 print("---\n")
 
-
 # %%
-if test:
-    plot_matched_matrices(A, B, S, result)
