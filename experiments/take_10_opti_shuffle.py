@@ -165,7 +165,8 @@ else:
 # %%
 
 perturb_steps = 30
-perturb_weight = 0.9
+perturb_weight = 0.1
+perturb_type = "shuffle"
 
 experiment_params = {
     "max_iter": max_iter,
@@ -246,6 +247,7 @@ groupycenter = np.zeros((A_input.shape[0], B_input.shape[0]))
 
 labels_A = nf.nodes["cell_type"].values
 labels_B = target_nodes["cell_type"].values
+unique_labels = np.unique(labels_B)
 groupycenter[labels_A[:, None] == labels_B[None, :]] = 1
 
 from graspologic.match.solver import _doubly_stochastic
@@ -262,6 +264,7 @@ reference_frame.to_csv(out_path / f"{save_name}_reference_frame.csv", index=Fals
 groupycenter = _doubly_stochastic(groupycenter, tol=1e-3)
 
 matches_by_iter = []
+p_shuffle = 0.1
 
 n_init = 1
 all_time = time.time()
@@ -271,9 +274,39 @@ for i in range(1, max_iter + 1):
     if isinstance(last_solution, csr_array):
         last_solution = last_solution.toarray()
     if i % perturb_steps == 0 or i == 1:
-        last_solution = (
-            1 - perturb_weight
-        ) * last_solution + perturb_weight * groupycenter
+        if perturb_type == "barycenter":
+            last_solution = (
+                1 - perturb_weight
+            ) * last_solution + perturb_weight * groupycenter
+        elif perturb_type == "shuffle":
+            # permute only a fraction of the nodes, by shuffling "last solution"
+            # make sure the shuffles only happen within group
+            all_indices = np.arange(len(labels_B))
+            for cell_label in unique_labels:
+                # select the nodes within a group
+                current_indices = all_indices[labels_B == cell_label]
+
+                # select a proportion to shuffle
+                select_indices_from_current = np.random.choice(
+                    len(current_indices),
+                    size=(int(np.floor(perturb_weight * len(current_indices)))),
+                )
+                # shuffle those
+                shuffled_indices_from_current = np.random.permutation(
+                    select_indices_from_current
+                )
+                new_current_indices = current_indices.copy()
+                new_current_indices[select_indices_from_current] = new_current_indices[
+                    shuffled_indices_from_current
+                ]
+                all_indices[current_indices] = new_current_indices
+
+            last_solution = last_solution[:, all_indices]
+            last_solution += groupycenter * 0.01
+            last_solution = _doubly_stochastic(last_solution)
+        else:
+            pass
+
     result = graph_match(
         A_input,
         B_input,

@@ -4,13 +4,12 @@ from networkframe import NetworkFrame
 
 from graspologic.match.wrappers import MatchResult
 
-from .constants import N_COLUMNS, N_TYPES
+from .constants import N_TYPES
 from .metrics import cell_to_column_crosstab
 
 
 def add_fake_nodes(nf: NetworkFrame, label_feature: str = "column_id") -> None:
     cell_to_label_counts = cell_to_column_crosstab(nf.nodes, label_feature, dropna=True)
-
 
     i = 1
     fake_nodes = []
@@ -110,6 +109,7 @@ def correct_violations(nf: NetworkFrame, label_feature: str) -> NetworkFrame:
     within_group_edges = edges.query(
         f"source_{label_feature} == target_{label_feature}"
     )
+    within_group_edges = within_group_edges.query("source != target")
 
     nodes = nf.nodes
     # don't count the dummy nodes here

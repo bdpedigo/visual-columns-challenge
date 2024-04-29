@@ -13,11 +13,9 @@ from pkg import (
     load_networkframe,
 )
 
-test = False
-if test:
-    nf = load_networkframe(sample=10)
-else:
-    nf = load_networkframe()
+nf = load_networkframe(
+    path="visual-columns-challenge/results/submissions/columns_v3.csv"
+)
 
 label_feature = "column_id"
 
@@ -44,10 +42,11 @@ print()
 # reload_name = None
 # reload_from = "test=False-class_weight=75-tol=0.001-max_iter=100-sparse=True"
 # reload_from = "1710535591"
-reload_from = "class_weight=75-max_iter=100-restart=True"
+# reload_from = "class_weight=75-max_iter=100-restart=True"
 # reload_from = "1710544091"
+reload_from = "1712548568"
 reload = reload_from is not None
-reload_from_iter = 67
+reload_from_iter = 159
 
 if reload_from is not None:
     load_path = OUT_PATH
@@ -176,10 +175,10 @@ submission_nodes = submission_nodes.sort_values(["cell id"]).reset_index(drop=Tr
 submission_nodes["column id"] = (
     submission_nodes["column id"].astype("object").fillna("not assigned")
 )
-submission_nodes.to_csv(OUT_PATH / "submissions" / "columns_v1.csv", index=False)
+submission_nodes.to_csv(OUT_PATH / "submissions" / "columns_v4.csv", index=False)
 
 # %%
-test_nf = load_networkframe(path=OUT_PATH / "submissions" / "columns_v1.csv")
+test_nf = load_networkframe(path=OUT_PATH / "submissions" / "columns_v4.csv")
 
 test_nf = test_nf.query_nodes('node_type == "real" & column_id.notna()').copy()
 test_n_within_group, test_n_matched, test_violations = compute_metrics(
@@ -190,3 +189,5 @@ print(test_n_within_group)
 print(test_n_matched)
 print(test_violations)
 print()
+
+# %%
