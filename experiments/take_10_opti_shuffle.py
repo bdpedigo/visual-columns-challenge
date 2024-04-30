@@ -10,6 +10,7 @@ import time
 
 import numpy as np
 import pandas as pd
+import requests
 from pkg import (
     OUT_PATH,
     add_fake_nodes,
@@ -24,10 +25,14 @@ from scipy.sparse import csr_array
 
 from graspologic.match import graph_match
 
-load_path = "visual-columns-challenge/results/submissions/columns_v3.csv"
+load_path = "visual-columns-challenge/results/submissions/columns_v11.csv"
 nf = load_networkframe(
     path=load_path,
 )
+
+url = "https://discord.com/api/webhooks/1234682452518371418/4tLPdfS790x-Dwj0wfseBk8OLTJDrp_ImxY-uUk1upXwhOU1ykm-7JtvHG3vbbDcA6A8"
+
+
 # %%
 
 label_feature = "column_id"
@@ -85,7 +90,7 @@ print()
 
 # %%
 
-max_iter = 400
+max_iter = 24000
 class_weight = 200  # 150
 tol = 0.001
 sparse_position = True
@@ -164,8 +169,8 @@ else:
 
 # %%
 
-perturb_steps = 30
-perturb_weight = 0.1
+perturb_steps = 40
+perturb_weight = 0.3
 perturb_type = "shuffle"
 
 experiment_params = {
@@ -264,8 +269,13 @@ reference_frame.to_csv(out_path / f"{save_name}_reference_frame.csv", index=Fals
 groupycenter = _doubly_stochastic(groupycenter, tol=1e-3)
 
 matches_by_iter = []
-p_shuffle = 0.1
+# p_shuffle = 0.1
 
+best_score = corrected_n_within_group
+best_solution = last_solution
+
+perturb_steps_left = 60
+saw_best_this_cycle = False
 n_init = 1
 all_time = time.time()
 for i in range(1, max_iter + 1):
@@ -273,12 +283,21 @@ for i in range(1, max_iter + 1):
     currtime = time.time()
     if isinstance(last_solution, csr_array):
         last_solution = last_solution.toarray()
-    if i % perturb_steps == 0 or i == 1:
+    if perturb_steps_left == 0 or i == 1:
+        # GO BACK TO BEST
+        print(f"Reseting to solution @ {best_score}")
+        last_solution = best_solution
+        saw_best_this_cycle = False
+        perturb_steps_left = 60
+
         if perturb_type == "barycenter":
             last_solution = (
                 1 - perturb_weight
             ) * last_solution + perturb_weight * groupycenter
         elif perturb_type == "shuffle":
+            # perturb_weight = np.random.uniform(0.02, 0.2)
+            # perturb_weight = 0.3
+            print(f"PERTURB WEIGHT: {perturb_weight}")
             # permute only a fraction of the nodes, by shuffling "last solution"
             # make sure the shuffles only happen within group
             all_indices = np.arange(len(labels_B))
@@ -302,7 +321,7 @@ for i in range(1, max_iter + 1):
                 all_indices[current_indices] = new_current_indices
 
             last_solution = last_solution[:, all_indices]
-            last_solution += groupycenter * 0.01
+            last_solution += groupycenter * 0.001
             last_solution = _doubly_stochastic(last_solution)
         else:
             pass
@@ -317,7 +336,7 @@ for i in range(1, max_iter + 1):
         init=last_solution,
         tol=tol,
         # init_perturbation=0.001,
-        verbose=5,
+        verbose=0,
         fast=True,
         n_jobs=1,
         sparse_position=sparse_position,
@@ -364,30 +383,39 @@ for i in range(1, max_iter + 1):
         "time": solve_time,
         "score": result.score,
         "nnz": nnz,
+        "perturb_steps_left": perturb_steps_left,
         **experiment_params,
     }
     scores.append(iter_scores)
-    print()
     print("Iteration scores:")
     print(iter_scores)
     print()
 
-    # print("trying scoring again")
-    # matched_nf = create_matched_networkframe(nf, result, target_nodes)
+    if corrected_n_within_group > best_score:
+        print()
+        print()
+        print(f"NEW BEST SCORE: {corrected_n_within_group}")
+        print(f"BEST ITERATION: {i}")
+        print(f"PERTURB WEIGHT: {perturb_weight}")
+        print()
+        print()
+        best_score = corrected_n_within_group
+        best_solution = last_solution
+        saw_best_this_cycle = True
+        perturb_steps_left += 30
+        out = dict(
+            content=f"NEW BEST SCORE: {best_score} (@ experiment {experiment_id}, iteration {i})"
+        )
+        try:
+            requests.post(url, json=out)
+        except:
+            try:
+                requests.post(url, json=out)
+            except:
+                pass
+            pass
 
-    # new_n_within_group, new_n_matched, new_violations = compute_metrics(
-    #     matched_nf, "predicted_column_id"
-    # )
-
-    # corrected_nf = correct_violations(matched_nf, "predicted_column_id")
-
-    # (
-    #     corrected_n_within_group,
-    #     corrected_n_matched,
-    #     corrected_violations,
-    # ) = compute_metrics(corrected_nf, "predicted_column_id")
-    # print(i, corrected_n_within_group)
-    # print()
+    perturb_steps_left -= 1
 
     result.misc[0]["convex_solution"] = csr_array(result.misc[0]["convex_solution"])
     results_by_iter.append(result)
