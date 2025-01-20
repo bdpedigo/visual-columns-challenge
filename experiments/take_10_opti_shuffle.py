@@ -25,7 +25,7 @@ from scipy.sparse import csr_array
 
 from graspologic.match import graph_match
 
-load_path = "visual-columns-challenge/results/submissions/columns_v11.csv"
+load_path = "visual-columns-challenge/results/submissions/columns_v15.csv"
 nf = load_networkframe(
     path=load_path,
 )
@@ -169,8 +169,8 @@ else:
 
 # %%
 
-perturb_steps = 40
-perturb_weight = 0.3
+perturb_steps = 100
+perturb_weight = 0.05
 perturb_type = "shuffle"
 
 experiment_params = {
@@ -274,7 +274,7 @@ matches_by_iter = []
 best_score = corrected_n_within_group
 best_solution = last_solution
 
-perturb_steps_left = 60
+perturb_steps_left = perturb_steps
 saw_best_this_cycle = False
 n_init = 1
 all_time = time.time()
@@ -288,7 +288,7 @@ for i in range(1, max_iter + 1):
         print(f"Reseting to solution @ {best_score}")
         last_solution = best_solution
         saw_best_this_cycle = False
-        perturb_steps_left = 60
+        perturb_steps_left = perturb_steps
 
         if perturb_type == "barycenter":
             last_solution = (
@@ -402,7 +402,8 @@ for i in range(1, max_iter + 1):
         best_score = corrected_n_within_group
         best_solution = last_solution
         saw_best_this_cycle = True
-        perturb_steps_left += 30
+        if perturb_steps_left < 100:
+            perturb_steps_left = 100
         out = dict(
             content=f"NEW BEST SCORE: {best_score} (@ experiment {experiment_id}, iteration {i})"
         )

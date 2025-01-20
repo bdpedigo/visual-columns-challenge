@@ -13,7 +13,7 @@ from pkg import (
     load_networkframe,
 )
 
-i = 10
+i = 15
 nf = load_networkframe(
     path=f"visual-columns-challenge/results/submissions/columns_v{i}.csv"
 )
@@ -49,9 +49,9 @@ print()
 # reload = reload_from is not None
 # reload_from_iter = 159
 
-reload_from = "1714505583"
+reload_from = "1714618855"
 reload = reload_from is not None
-reload_from_iter = 87 - 1  # 1 less than python
+reload_from_iter = 551 - 1  # 1 less than python
 
 if reload_from is not None:
     load_path = OUT_PATH
